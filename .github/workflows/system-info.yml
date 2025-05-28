@@ -24,13 +24,12 @@ jobs:
         shell: bash
         run: |
           echo "OS Version:"
-          
           if [ "${{ runner.os }}" == "Linux" ]; then
             lsb_release -a
           elif [ "${{ runner.os }}" == "macOS" ]; then
             sw_vers
           elif [ "${{ runner.os }}" == "Windows" ]; then
-            Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture
+            powershell -Command "Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture"
           fi
       - name: CPU アーキテクチャを表示
         shell: bash
@@ -39,7 +38,7 @@ jobs:
           if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
             uname -m
           elif [ "${{ runner.os }}" == "Windows" ]; then
-            echo $env:PROCESSOR_ARCHITECTURE
+            powershell -Command 'Write-Host $env:PROCESSOR_ARCHITECTURE'
           fi
       - name: メモリ情報を表示
         shell: bash
@@ -50,7 +49,7 @@ jobs:
           elif [ "${{ runner.os }}" == "macOS" ]; then
             top -l 1 | grep PhysMem
           elif [ "${{ runner.os }}" == "Windows" ]; then
-            Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory
+            powershell -Command "Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory"
           fi
       - name: ストレージ空き容量を表示
         shell: bash
