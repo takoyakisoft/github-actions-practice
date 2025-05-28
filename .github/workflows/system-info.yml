@@ -23,40 +23,41 @@ jobs:
       - name: OS バージョンを表示
         run: |
           echo "OS Version:"
-          if [ "$RUNNER_OS" == "Linux" ]; then
+          
+          if [ "${{ runner.os }}" == "Linux" ]; then
             lsb_release -a
-          elif [ "$RUNNER_OS" == "macOS" ]; then
+          elif [ "${{ runner.os }}" == "macOS" ]; then
             sw_vers
-          elif [ "$RUNNER_OS" == "Windows" ]; then
+          elif [ "${{ runner.os }}" == "Windows" ]; then
             Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture
           fi
 
       - name: CPU アーキテクチャを表示
         run: |
           echo "CPU Architecture:"
-          if [ "$RUNNER_OS" == "Linux" ] || [ "$RUNNER_OS" == "macOS" ]; then
+          if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
             uname -m
-          elif [ "$RUNNER_OS" == "Windows" ]; then
+          elif [ "${{ runner.os }}" == "Windows" ]; then
             echo $env:PROCESSOR_ARCHITECTURE
           fi
 
       - name: メモリ情報を表示
         run: |
           echo "Memory Information:"
-          if [ "$RUNNER_OS" == "Linux" ]; then
+          if [ "${{ runner.os }}" == "Linux" ]; then
             free -h
-          elif [ "$RUNNER_OS" == "macOS" ]; then
+          elif [ "${{ runner.os }}" == "macOS" ]; then
             top -l 1 | grep PhysMem
-          elif [ "$RUNNER_OS" == "Windows" ]; then
+          elif [ "${{ runner.os }}" == "Windows" ]; then
             Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory
           fi
 
       - name: ストレージ空き容量を表示
         run: |
           echo "Storage Free Space:"
-          if [ "$RUNNER_OS" == "Linux" ] || [ "$RUNNER_OS" == "macOS" ]; then
+          if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
             df -h
-          elif [ "$RUNNER_OS" == "Windows" ]; then
+          elif [ "${{ runner.os }}" == "Windows" ]; then
             powershell -Command "Get-Volume | Select-Object DriveLetter, FileSystemLabel, @{Name='Size(GB)';Expression={[math]::Round($_.Size / 1GB,2)}}, @{Name='FreeSpace(GB)';Expression={[math]::Round($_.SizeRemaining / 1GB,2)}}"
           fi
 
