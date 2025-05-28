@@ -5,10 +5,10 @@ name: CI
 # ワークフローを実行するタイミングを制御します
 on:
   # "main" ブランチへの push または pull request イベントでワークフローをトリガーします
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  # push:
+  #   branches: [ "main" ]
+  # pull_request:
+  #   branches: [ "main" ]
 
   # Actions タブからこのワークフローを手動で実行できるようにします
   workflow_dispatch:
