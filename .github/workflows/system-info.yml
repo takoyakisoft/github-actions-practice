@@ -1,0 +1,95 @@
+name: System Info
+
+# ワークフローを実行するタイミングを制御します
+on:
+  # Actions タブからこのワークフローを手動で実行できるようにします
+  workflow_dispatch:
+
+# ワークフローの実行は、順次または並行して実行できる1つ以上のジョブで構成されます
+jobs:
+  # このワークフローには "build" という単一のジョブが含まれています
+  build:
+    # ジョブが実行されるランナーのタイプ (ubuntu-latest, macos-latest, windows-latest など)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    # ステップは、ジョブの一部として実行される一連のタスクを表します
+    steps:
+      # $GITHUB_WORKSPACE にリポジトリをチェックアウトし、ジョブがアクセスできるようにします
+      - uses: actions/checkout@v4
+
+      - name: OS バージョンを表示
+        run: |
+          echo "OS Version:"
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            lsb_release -a
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            sw_vers
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture
+          fi
+
+      - name: CPU アーキテクチャを表示
+        run: |
+          echo "CPU Architecture:"
+          if [ "$RUNNER_OS" == "Linux" ] || [ "$RUNNER_OS" == "macOS" ]; then
+            uname -m
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            echo $env:PROCESSOR_ARCHITECTURE
+          fi
+
+      - name: メモリ情報を表示
+        run: |
+          echo "Memory Information:"
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            free -h
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            top -l 1 | grep PhysMem
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory
+          fi
+
+      - name: ストレージ空き容量を表示
+        run: |
+          echo "Storage Free Space:"
+          if [ "$RUNNER_OS" == "Linux" ] || [ "$RUNNER_OS" == "macOS" ]; then
+            df -h
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            Get-Volume | Select-Object DriveLetter, FileSystemLabel, @{Name="Size(GB)";Expression={[math]::Round($_.Size/1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.SizeRemaining/1GB,2)}}
+          fi
+
+      - name: 現在のディレクトリとファイル一覧を表示 (pwd & ls -la)
+        run: |
+          echo "Current Directory (pwd):"
+          pwd
+          echo "File List (ls -la):"
+          ls -la
+
+      - name: インストール済みの開発ツール バージョンを確認 (例)
+        run: |
+          echo "Development Tool Versions:"
+          echo "--- Git ---"
+          git --version
+          echo "--- Node.js ---"
+          node -v || echo "Node.js not found"
+          echo "--- Python ---"
+          python --version || python3 --version || echo "Python not found"
+          echo "--- Docker ---"
+          docker --version || echo "Docker not found"
+          echo "--- Go ---"
+          go version || echo "Go not found"
+          echo "--- Java (JDK) ---"
+          java -version || echo "Java (JDK) not found"
+          echo "--- Ruby ---"
+          ruby -v || echo "Ruby not found"
+          echo "--- .NET Core SDK ---"
+          dotnet --list-sdks || echo ".NET Core SDK not found"
+          # 他にも確認したいツールがあればここに追加します
+          
+      # ランナーのシェルを使用して一連のコマンドを実行します
+      - name: 複数行のスクリプトを実行
+        run: |
+          echo 他のアクションを追加して、
+          echo プロジェクトをビルド、テスト、デプロイします。
