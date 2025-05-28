@@ -57,7 +57,7 @@ jobs:
           if [ "$RUNNER_OS" == "Linux" ] || [ "$RUNNER_OS" == "macOS" ]; then
             df -h
           elif [ "$RUNNER_OS" == "Windows" ]; then
-            Get-Volume | Select-Object DriveLetter, FileSystemLabel, @{Name="Size(GB)";Expression={[math]::Round($_.Size/1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.SizeRemaining/1GB,2)}}
+            powershell -Command "Get-Volume | Select-Object DriveLetter, FileSystemLabel, @{Name='Size(GB)';Expression={[math]::Round($_.Size / 1GB,2)}}, @{Name='FreeSpace(GB)';Expression={[math]::Round($_.SizeRemaining / 1GB,2)}}"
           fi
 
       - name: 現在のディレクトリとファイル一覧を表示 (pwd & ls -la)
