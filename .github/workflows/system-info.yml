@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: OS バージョンを表示
+        shell: bash
         run: |
           echo "OS Version:"
           
@@ -31,8 +32,8 @@ jobs:
           elif [ "${{ runner.os }}" == "Windows" ]; then
             Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture
           fi
-
       - name: CPU アーキテクチャを表示
+        shell: bash
         run: |
           echo "CPU Architecture:"
           if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
@@ -40,8 +41,8 @@ jobs:
           elif [ "${{ runner.os }}" == "Windows" ]; then
             echo $env:PROCESSOR_ARCHITECTURE
           fi
-
       - name: メモリ情報を表示
+        shell: bash
         run: |
           echo "Memory Information:"
           if [ "${{ runner.os }}" == "Linux" ]; then
@@ -51,8 +52,8 @@ jobs:
           elif [ "${{ runner.os }}" == "Windows" ]; then
             Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory
           fi
-
       - name: ストレージ空き容量を表示
+        shell: bash
         run: |
           echo "Storage Free Space:"
           if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
@@ -60,15 +61,15 @@ jobs:
           elif [ "${{ runner.os }}" == "Windows" ]; then
             powershell -Command "Get-Volume | Select-Object DriveLetter, FileSystemLabel, @{Name='Size(GB)';Expression={[math]::Round($_.Size / 1GB,2)}}, @{Name='FreeSpace(GB)';Expression={[math]::Round($_.SizeRemaining / 1GB,2)}}"
           fi
-
       - name: 現在のディレクトリとファイル一覧を表示 (pwd & ls -la)
+        shell: bash
         run: |
           echo "Current Directory (pwd):"
           pwd
           echo "File List (ls -la):"
           ls -la
-
       - name: インストール済みの開発ツール バージョンを確認 (例)
+        shell: bash
         run: |
           echo "Development Tool Versions:"
           echo "--- Git ---"
@@ -91,6 +92,7 @@ jobs:
           
       # ランナーのシェルを使用して一連のコマンドを実行します
       - name: 複数行のスクリプトを実行
+        shell: bash
         run: |
           echo 他のアクションを追加して、
           echo プロジェクトをビルド、テスト、デプロイします。
