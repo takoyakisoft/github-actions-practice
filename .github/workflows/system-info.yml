@@ -24,7 +24,7 @@ jobs:
       - name: OS バージョンを表示
         shell: bash
         run: |
-          echo "OS Version:"
+          echo "OS Version (includes OS architecture from Get-ComputerInfo on Windows):"
           if [ "${{ runner.os }}" == "Linux" ]; then
             lsb_release -a
           elif [ "${{ runner.os }}" == "macOS" ]; then
@@ -33,32 +33,29 @@ jobs:
             command pwsh.exe -NoProfile -Command 'Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture'
           fi
 
-      - name: CPU 詳細情報を表示
+      - name: CPU 詳細情報を表示 (アーキテクチャ、コア数、周波数など)
         shell: bash
         run: |
           echo "CPU Information:"
           if [ "${{ runner.os }}" == "Linux" ]; then
-            lscpu
+            lscpu # アーキテクチャ、コア数、周波数など多くの情報が含まれます
           elif [ "${{ runner.os }}" == "macOS" ]; then
             echo "Model: $(sysctl -n machdep.cpu.brand_string)"
+            echo "Architecture: $(uname -m)"
             echo "Physical Cores: $(sysctl -n hw.physicalcpu)"
             echo "Logical Cores: $(sysctl -n hw.logicalcpu)"
-            # hw.cpufrequency_max はヘルツ単位なのでMHzに変換
             MAX_FREQ_HZ=$(sysctl -n hw.cpufrequency_max)
-            MAX_FREQ_MHZ=$((MAX_FREQ_HZ / 1000000))
-            echo "Max Frequency: ${MAX_FREQ_MHZ} MHz"
+            if [ -n "$MAX_FREQ_HZ" ]; then # Check if MAX_FREQ_HZ is not empty
+              MAX_FREQ_MHZ=$((MAX_FREQ_HZ / 1000000))
+              echo "Max Frequency: ${MAX_FREQ_MHZ} MHz"
+            else
+              echo "Max Frequency: Not available"
+            fi
           elif [ "${{ runner.os }}" == "Windows" ]; then
-            command pwsh.exe -NoProfile -Command "Get-CimInstance Win32_Processor | Select-Object Name, Manufacturer, MaxClockSpeed, NumberOfCores, NumberOfLogicalProcessors, SocketDesignation, Caption | Format-List"
-          fi
-
-      - name: CPU アーキテクチャを表示
-        shell: bash
-        run: |
-          echo "CPU Architecture:"
-          if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
-            uname -m
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            command pwsh.exe -NoProfile -Command 'Write-Host $env:PROCESSOR_ARCHITECTURE'
+            # OsArchitecture は Get-ComputerInfo で表示済みですが、CPU固有の情報としてここにも表示
+            command pwsh.exe -NoProfile -Command "Get-CimInstance Win32_Processor | Select-Object Name, Manufacturer, MaxClockSpeed, NumberOfCores, NumberOfLogicalProcessors, ArchitectureDescription, SocketDesignation, Caption | Format-List"
+            # ArchitectureDescription はより分かりやすいアーキテクチャ名 (例: Intel64 Family 6 Model 142 Stepping 12) を返します。
+            # $env:PROCESSOR_ARCHITECTURE もありますが、上記でカバーされます。
           fi
 
       - name: メモリ情報を表示
@@ -69,9 +66,6 @@ jobs:
             free -h
           elif [ "${{ runner.os }}" == "macOS" ]; then
             top -l 1 | grep PhysMem
-            # より詳細なメモリ情報が必要な場合:
-            # vm_stat
-            # sysctl hw.memsize | awk '{print "Physical Memory: " $2 / 1024 / 1024 " MB"}'
           elif [ "${{ runner.os }}" == "Windows" ]; then
             command pwsh.exe -NoProfile -Command 'Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory'
           fi
@@ -99,11 +93,17 @@ jobs:
         run: |
           echo "Development Tool Versions:"
           echo ""
-          echo "--- General Tools ---"
+          echo "--- General & System Build Tools ---"
           echo "Git:"
-          git --version
+          git --version || echo "Git not found"
           echo "Bash:"
           bash --version || echo "Bash not found or not in PATH"
+          if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
+            echo "Make:"
+            make --version || echo "Make not found"
+          fi
+          echo "CMake:"
+          cmake --version || echo "CMake not found"
           
           echo ""
           echo "--- JavaScript / TypeScript Runtimes & Package Managers ---"
@@ -123,7 +123,7 @@ jobs:
           echo "Ruby:"
           ruby -v || echo "Ruby not found"
           echo "Perl:"
-          (perl --version || perl -v) || echo "Perl not found" # perl -v gives more details
+          (perl --version || perl -v) || echo "Perl not found"
           echo "PHP:"
           php --version || echo "PHP not found"
           echo "Lua:"
@@ -132,16 +132,18 @@ jobs:
           echo ""
           echo "--- Compiled Languages & SDKs ---"
           echo "Java (JDK):"
-          java -version 2>&1 || echo "Java (JDK) not found" # java -version often prints to stderr
+          java -version 2>&1 || echo "Java (JDK) not found"
           echo "Go (Golang):"
           go version || echo "Go not found"
           echo "Rust (rustc):"
           rustc --version || echo "Rust (rustc) not found"
+          echo "Dart SDK:"
+          (command -v dart && dart --version) || echo "Dart SDK not found or not in PATH"
           echo ".NET Core SDK:"
           dotnet --list-sdks || echo ".NET Core SDK not found"
 
           echo ""
-          echo "--- C/C++ Compilers ---"
+          echo "--- C/C++ Compilers & Tools ---"
           if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
             echo "GCC:"
             gcc --version || echo "GCC not found"
@@ -149,80 +151,102 @@ jobs:
             g++ --version || echo "G++ not found"
             echo "Clang:"
             clang --version || echo "Clang not found"
+            echo "Clang++:"
+            clang++ --version || echo "Clang++ not found"
+            echo "Clang-format:"
+            clang-format --version || echo "clang-format not found" # Common C/C++ formatter
           fi
           if [ "${{ runner.os }}" == "Windows" ]; then
             echo "MSVC (Microsoft Visual C++ Compiler):"
-            # Attempt to call cl.exe. It should be in PATH on GitHub Windows runners.
-            # cl.exe outputs version info on the first few lines when called.
-            (cl.exe 2>&1 | findstr /B /C:"Microsoft (R) C/C++ Optimizing Compiler Version" /C:"Microsoft (R) C/C++ Optimizing Compiler バージョン" || echo "MSVC (cl.exe) not found, not in PATH, or version string pattern mismatch.")
+            (cl.exe /? 2>&1 | findstr /B /C:"Microsoft (R) C/C++ Optimizing Compiler Version" /C:"Microsoft (R) C/C++ Optimizing Compiler バージョン" || echo "MSVC (cl.exe) not found, not in PATH, or version string pattern mismatch.")
+            echo "MSBuild:"
+            (powershell -NoProfile -Command "(Get-Command MSBuild -ErrorAction SilentlyContinue).Path" ; MSBuild.exe -version -noLogo 2>&1 | findstr /B /C:"Microsoft (R) Build Engine version" /C:"Microsoft (R) Build Engine バージョン" || echo "MSBuild not found, not in PATH or version string pattern mismatch")
           fi
+
+          echo ""
+          echo "--- Java Build Tools ---"
+          echo "Gradle:"
+          (command -v gradle && gradle --version) || echo "Gradle not found or not in PATH"
+          echo "Maven (mvn):"
+          (command -v mvn && mvn --version) || echo "Maven (mvn) not found or not in PATH"
 
           echo ""
           echo "--- Mobile & Cross-Platform Frameworks ---"
           echo "Flutter:"
-          # Flutter needs to be in PATH.
           (command -v flutter && flutter --version) || echo "Flutter SDK not found or not in PATH"
           
           echo ""
-          echo "--- Game Engines (Version check can be complex) ---"
+          echo "--- Game Engines ---"
           echo "Godot Engine:"
-          # Godot needs to be in PATH or called via its full path.
           (command -v godot && godot --version) || echo "Godot Engine not found, not in PATH, or version check failed."
-          echo "Unity:"
-          echo "Unity version check is complex and usually requires editor context. Not performed by default."
-          echo "Unreal Engine (UE5):"
-          echo "Unreal Engine version check is complex. Not performed by default."
+          
+          echo ""
+          echo "--- Debuggers (Examples) ---"
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            echo "LLDB:"
+            lldb --version || echo "LLDB not found"
+          fi
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            echo "GDB:"
+            gdb --version || echo "GDB not found"
+          fi
+          # Windows Debugger (WinDbg) is typically part of Windows SDKs, complex to get a simple version string for all setups.
           
           echo ""
           echo "--- OS Specific Development Tools ---"
           if [ "${{ runner.os }}" == "macOS" ]; then
             echo "Xcode Command Line Tools:"
             xcodebuild -version || echo "Xcode Command Line Tools not found"
-            # For full Xcode version if installed:
-            # if [ -d "/Applications/Xcode.app" ]; then defaults read /Applications/Xcode.app/Contents/Info.plist CFBundleShortVersionString; else echo "Full Xcode.app not found"; fi
           fi
           if [ "${{ runner.os }}" == "Windows" ]; then
-            echo "Android NDK:"
-            # GitHub Windows runners usually set ANDROID_NDK_LATEST_HOME
+            echo "Android NDK (from source.properties if found):"
             command pwsh.exe -NoProfile -Command "
+              \$NdkRevision = ''
               if (Test-Path Env:ANDROID_NDK_LATEST_HOME) {
                 \$ndkPath = \$env:ANDROID_NDK_LATEST_HOME
                 \$propsFile = Join-Path \$ndkPath 'source.properties'
                 if (Test-Path \$propsFile) {
-                  (Get-Content \$propsFile | Select-String 'Pkg.Revision' -ErrorAction SilentlyContinue).Line
+                  \$NdkRevision = (Get-Content \$propsFile | Select-String 'Pkg.Revision' -ErrorAction SilentlyContinue).Line
                 } else {
-                  Write-Host \"source.properties not found in \$ndkPath (\$propsFile)\"
+                  Write-Host \"source.properties not found in \$ndkPath (\$propsFile)\" -ForegroundColor Yellow
                 }
               } else {
-                Write-Host 'ANDROID_NDK_LATEST_HOME environment variable not set. Trying common paths...'
-                # Fallback for older or custom setups if ANDROID_NDK_LATEST_HOME is not set
-                \$commonNdkPaths = @(
-                    (Get-ChildItem 'C:\\ProgramData\\Microsoft\\AndroidNDK64\\android-ndk-r*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1).FullName,
+                Write-Host 'ANDROID_NDK_LATEST_HOME environment variable not set. Trying common paths...' -ForegroundColor Yellow
+                \$commonNdkBasePaths = @(
+                    'C:\\ProgramData\\Microsoft\\AndroidNDK64',
                     'C:\\Users\\runneradmin\\AppData\\Local\\Android\\Sdk\\ndk'
                 )
-                \$foundRevision = \$null
-                foreach (\$path in \$commonNdkPaths) {
-                    if (\$path -and (Test-Path (Join-Path \$path 'source.properties'))) {
-                        \$propsFile = Join-Path \$path 'source.properties'
-                        \$foundRevision = (Get-Content \$propsFile | Select-String 'Pkg.Revision' -ErrorAction SilentlyContinue).Line
-                        if (\$foundRevision) { Write-Host \$foundRevision; break }
+                foreach (\$basePath in \$commonNdkBasePaths) {
+                    if (Test-Path \$basePath) {
+                        # Get the latest NDK version directory by name (e.g., android-ndk-r25c)
+                        \$latestNdkDir = Get-ChildItem \$basePath -Directory -ErrorAction SilentlyContinue | Where-Object { \$_ -match 'android-ndk-r\d+[a-z]?' } | Sort-Object Name -Descending | Select-Object -First 1
+                        if (\$latestNdkDir) {
+                            \$propsFile = Join-Path \$latestNdkDir.FullName 'source.properties'
+                            if (Test-Path \$propsFile) {
+                                \$NdkRevision = (Get-Content \$propsFile | Select-String 'Pkg.Revision' -ErrorAction SilentlyContinue).Line
+                                if (\$NdkRevision) { break }
+                            }
+                        }
                     }
                 }
-                if (!\$foundRevision) { Write-Host 'Android NDK Pkg.Revision not found in fallback common locations.' }
               }
+              if (\$NdkRevision) { Write-Host \$NdkRevision }
+              else { Write-Host 'Android NDK Pkg.Revision not found.' -ForegroundColor Yellow }
             " || echo "Android NDK check (via PowerShell) failed."
           fi
 
           echo ""
-          echo "--- Containerization ---"
+          echo "--- Containerization & Orchestration ---"
           echo "Docker:"
           docker --version || echo "Docker not found"
-          
-      # ランナーのシェルを使用して一連のコマンドを実行します
-      - name: 複数行のスクリプトを実行
-        shell: bash
-        run: |
+          echo "kubectl (Client):"
+          kubectl version --client --short || echo "kubectl client not found or version check failed"
+
           echo ""
-          echo "--- Workflow Completion ---"
-          echo 他のアクションを追加して、
-          echo プロジェクトをビルド、テスト、デプロイします。
+          echo "--- Cloud CLIs ---"
+          echo "AWS CLI:"
+          aws --version || echo "AWS CLI not found"
+          echo "Azure CLI:"
+          az --version || echo "Azure CLI not found"
+          echo "Google Cloud SDK (gcloud):"
+          gcloud version || echo "Google Cloud SDK (gcloud) not found"
