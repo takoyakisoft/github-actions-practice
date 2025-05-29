@@ -1,4 +1,3 @@
-# https://github.com/actions/runner-images/
 name: System Info
 
 on:
@@ -12,28 +11,32 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            shell: bash
+            job_shell: bash  # キー名を変更
           - os: macos-latest
-            shell: bash
+            job_shell: bash  # キー名を変更
           - os: windows-latest
-            shell: pwsh
+            job_shell: pwsh  # キー名を変更
+
+    defaults: # ジョブレベルのデフォルトシェルを設定
+      run:
+        shell: ${{ matrix.job_shell }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: OS バージョンを表示
-        shell: ${{ matrix.shell }}
+        # shell は defaults.run.shell を使用
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             lsb_release -a
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             sw_vers
-          else
+          else # Windows (pwsh)
             Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture
           fi
 
       - name: CPU 詳細情報を表示
-        shell: ${{ matrix.shell }}
+        # shell は defaults.run.shell を使用
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             lscpu
@@ -44,29 +47,29 @@ jobs:
             echo "Logical Cores: $(sysctl -n hw.logicalcpu)"
             MAX_FREQ_HZ=$(sysctl -n hw.cpufrequency_max 2>/dev/null)
             [[ -n "$MAX_FREQ_HZ" ]] && echo "Max Frequency: $((MAX_FREQ_HZ / 1000000)) MHz"
-          else
+          else # Windows (pwsh)
             Get-CimInstance Win32_Processor | Format-List Name, Manufacturer, MaxClockSpeed, NumberOfCores, NumberOfLogicalProcessors, ArchitectureDescription, SocketDesignation, Caption
           fi
 
       - name: メモリ情報を表示
-        shell: ${{ matrix.shell }}
+        # shell は defaults.run.shell を使用
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             free -h
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             top -l 1 -s 0 | grep PhysMem
-          else
+          else # Windows (pwsh)
             $mem = Get-CimInstance Win32_OperatingSystem
             "Total: {0}GB" -f [math]::Round($mem.TotalVisibleMemorySize/1MB, 2)
             "Free: {0}GB" -f [math]::Round($mem.FreePhysicalMemory/1MB, 2)
           fi
 
       - name: ストレージ空き容量を表示
-        shell: ${{ matrix.shell }}
+        # shell は defaults.run.shell を使用
         run: |
           if [[ "${{ runner.os }}" == "Linux" || "${{ runner.os }}" == "macOS" ]]; then
             df -h
-          else
+          else # Windows (pwsh)
             Get-Volume | Where-Object DriveLetter | 
               Select-Object DriveLetter, FileSystemLabel, 
                 @{Name="Size(GB)";Expression={[math]::Round($_.Size/1GB,2)}}, 
@@ -75,7 +78,7 @@ jobs:
           fi
 
       - name: インストール済み開発ツールの確認
-        shell: bash
+        shell: bash # このステップはbashスクリプトとして実行
         run: |
           # ツールチェック用関数
           check_tool() {
@@ -110,7 +113,7 @@ jobs:
           check_tool clang "clang --version | head -1"
           check_tool cmake "cmake --version | head -1"
           check_tool make "make --version | head -1"
-          check_tool msbuild "msbuild -version | head -1"
+          check_tool msbuild "msbuild -version | head -1" # WindowsではPATHにあれば実行可能
           check_tool cargo "cargo --version"
           check_tool rustc "rustc --version"
           check_tool vcpkg "vcpkg version"
@@ -143,7 +146,7 @@ jobs:
           echo -e "\n=== Databases ==="
           check_tool psql "psql --version"
           check_tool mysql "mysql --version"
-          check_tool sqlcmd "sqlcmd -?"
+          check_tool sqlcmd "sqlcmd -?" # WindowsではPATHにあれば実行可能
           
           # その他ツール
           echo -e "\n=== Utilities ==="
@@ -166,13 +169,14 @@ jobs:
             check_tool pod "pod --version"
             check_tool brew "brew --version | head -1"
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            # これらはGit Bashから呼び出される
             check_tool pwsh "pwsh --version"
             check_tool choco "choco --version"
             check_tool nuget "nuget help | head -2 | tail -1"
           fi
 
       - name: Android NDK バージョン確認
-        shell: bash
+        shell: bash # このステップはbashスクリプトとして実行
         run: |
           if [[ -n "$ANDROID_NDK_HOME" ]]; then
             ndk_path="$ANDROID_NDK_HOME"
@@ -195,18 +199,66 @@ jobs:
 
       - name: インストール済みVSエクステンション確認 (Windows)
         if: matrix.os == 'windows-latest'
-        shell: pwsh
+        shell: pwsh # このステップはpwshスクリプトとして実行
         run: |
-          $extensions = & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -format json | 
-            ConvertFrom-Json | 
-            ForEach-Object { 
-              & "$($_.installationPath)\Common7\IDE\vsixinstaller.exe" /list | 
-                Where-Object { $_ -match "Extension Name" } 
+          # Visual Studio のインストールパスを取得 (vswhere.exe は Program Files (x86) にある想定)
+          $vsInstallerPath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vsInstallerPath)) {
+            Write-Host "vswhere.exe not found at $vsInstallerPath"
+            # Program Files にある可能性も考慮 (GitHub Hosted Runnerでは (x86) が一般的)
+            $vsInstallerPath = "C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe"
+            if (-not (Test-Path $vsInstallerPath)) {
+                Write-Host "vswhere.exe not found at $vsInstallerPath either. Skipping VS extension check."
+                exit 0
             }
+          }
+
+          # Visual Studioのインストール情報を取得
+          $vsInfo = & $vsInstallerPath -latest -prerelease -format json | ConvertFrom-Json
           
-          if ($extensions) {
-            "Installed VS Extensions:"
-            $extensions
+          if ($null -eq $vsInfo -or $null -eq $vsInfo.installationPath) {
+            Write-Host "No Visual Studio installation found by vswhere.exe. Skipping VS extension check."
+            exit 0
+          }
+
+          $vsixInstallerPath = Join-Path $vsInfo.installationPath "Common7\IDE\vsixinstaller.exe"
+          
+          if (-not (Test-Path $vsixInstallerPath)) {
+            Write-Host "VSIXInstaller.exe not found at $vsixInstallerPath. Skipping VS extension check."
+            exit 0
+          }
+
+          # インストール済み拡張機能を取得
+          # vsixinstaller.exe /list の出力は文字列の配列なので、加工が必要
+          $rawExtensionList = & $vsixInstallerPath /list
+          $installedExtensions = @()
+          $currentExtension = $null
+
+          foreach ($line in $rawExtensionList) {
+              if ($line -match "Extension Name\s*:\s*(.+)") {
+                  if ($null -ne $currentExtension) {
+                      $installedExtensions += $currentExtension
+                  }
+                  $currentExtension = [PSCustomObject]@{
+                      Name = $matches[1].Trim()
+                      ID = ""
+                      Version = ""
+                  }
+              } elseif ($currentExtension -ne $null) {
+                  if ($line -match "Extension ID\s*:\s*(.+)") {
+                      $currentExtension.ID = $matches[1].Trim()
+                  } elseif ($line -match "Extension Version\s*:\s*(.+)") {
+                      $currentExtension.Version = $matches[1].Trim()
+                  }
+              }
+          }
+          if ($null -ne $currentExtension) { # 最後の拡張機能を追加
+              $installedExtensions += $currentExtension
+          }
+          
+          if ($installedExtensions.Count -gt 0) {
+            Write-Host "Installed VS Extensions:"
+            $installedExtensions | Format-Table -AutoSize
           } else {
-            "No VS extensions found"
+            Write-Host "No VS extensions found or VSIXInstaller output format changed."
           }
