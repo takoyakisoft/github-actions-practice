@@ -1,3 +1,4 @@
+# https://github.com/actions/runner-images/
 name: System Info
 
 # ワークフローを実行するタイミングを制御します
@@ -31,6 +32,25 @@ jobs:
           elif [ "${{ runner.os }}" == "Windows" ]; then
             command pwsh.exe -NoProfile -Command 'Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture'
           fi
+
+      - name: CPU 詳細情報を表示
+        shell: bash
+        run: |
+          echo "CPU Information:"
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            lscpu
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            echo "Model: $(sysctl -n machdep.cpu.brand_string)"
+            echo "Physical Cores: $(sysctl -n hw.physicalcpu)"
+            echo "Logical Cores: $(sysctl -n hw.logicalcpu)"
+            # hw.cpufrequency_max はヘルツ単位なのでMHzに変換
+            MAX_FREQ_HZ=$(sysctl -n hw.cpufrequency_max)
+            MAX_FREQ_MHZ=$((MAX_FREQ_HZ / 1000000))
+            echo "Max Frequency: ${MAX_FREQ_MHZ} MHz"
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            command pwsh.exe -NoProfile -Command "Get-CimInstance Win32_Processor | Select-Object Name, Manufacturer, MaxClockSpeed, NumberOfCores, NumberOfLogicalProcessors, SocketDesignation, Caption | Format-List"
+          fi
+
       - name: CPU アーキテクチャを表示
         shell: bash
         run: |
@@ -40,6 +60,7 @@ jobs:
           elif [ "${{ runner.os }}" == "Windows" ]; then
             command pwsh.exe -NoProfile -Command 'Write-Host $env:PROCESSOR_ARCHITECTURE'
           fi
+
       - name: メモリ情報を表示
         shell: bash
         run: |
@@ -47,24 +68,24 @@ jobs:
           if [ "${{ runner.os }}" == "Linux" ]; then
             free -h
           elif [ "${{ runner.os }}" == "macOS" ]; then
-            # macOS の top コマンドは出力形式が変わりやすいため、より安定した方法を推奨
-            # sysctl hw.memsize | awk '{print "Physical Memory: " $2 / 1024 / 1024 " MB"}'
+            top -l 1 | grep PhysMem
+            # より詳細なメモリ情報が必要な場合:
             # vm_stat
-            top -l 1 | grep PhysMem # 元のコマンドを維持
+            # sysctl hw.memsize | awk '{print "Physical Memory: " $2 / 1024 / 1024 " MB"}'
           elif [ "${{ runner.os }}" == "Windows" ]; then
             command pwsh.exe -NoProfile -Command 'Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory'
           fi
+
       - name: ストレージ空き容量を表示
         shell: bash
         run: |
           echo "Storage Free Space:"
           if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
             df -h
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            # PowerShellコマンド内のハッシュテーブルのキー名はダブルクォートで囲むのが一般的ですが、
-            # 全体をシングルクォートで囲んでいるため、PowerShellが正しく解釈します。
-            command pwsh.exe -NoProfile -Command 'Get-Volume | Select-Object DriveLetter, FileSystemLabel, @{Name="Size(GB)";Expression={[math]::Round($_.Size / 1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.SizeRemaining / 1GB,2)}}'
+          elif [ "${{ runner.os }}" == "Windows" ];then
+            command pwsh.exe -NoProfile -Command 'Get-Volume | Select-Object DriveLetter, FileSystemLabel, @{Name="Size(GB)";Expression={[math]::Round($_.Size / 1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.SizeRemaining / 1GB,2)}} | Format-Table'
           fi
+
       - name: 現在のディレクトリとファイル一覧を表示 (pwd & ls -la)
         shell: bash
         run: |
@@ -72,31 +93,136 @@ jobs:
           pwd
           echo "File List (ls -la):"
           ls -la
-      - name: インストール済みの開発ツール バージョンを確認 (例)
+
+      - name: インストール済みの開発ツール バージョンを確認
         shell: bash
         run: |
           echo "Development Tool Versions:"
-          echo "--- Git ---"
+          echo ""
+          echo "--- General Tools ---"
+          echo "Git:"
           git --version
-          echo "--- Node.js ---"
+          echo "Bash:"
+          bash --version || echo "Bash not found or not in PATH"
+          
+          echo ""
+          echo "--- JavaScript / TypeScript Runtimes & Package Managers ---"
+          echo "Node.js:"
           node -v || echo "Node.js not found"
-          echo "--- Python ---"
-          python --version || python3 --version || echo "Python not found"
-          echo "--- Docker ---"
-          docker --version || echo "Docker not found"
-          echo "--- Go ---"
-          go version || echo "Go not found"
-          echo "--- Java (JDK) ---"
-          java -version || echo "Java (JDK) not found"
-          echo "--- Ruby ---"
+          echo "npm:"
+          npm --version || echo "npm not found (usually installed with Node.js)"
+          echo "Bun:"
+          (command -v bun && bun --version) || echo "Bun not found or not in PATH"
+          echo "Deno:"
+          (command -v deno && deno --version) || echo "Deno not found or not in PATH"
+          
+          echo ""
+          echo "--- Scripting Languages ---"
+          echo "Python:"
+          (python3 --version || python --version) || echo "Python not found"
+          echo "Ruby:"
           ruby -v || echo "Ruby not found"
-          echo "--- .NET Core SDK ---"
+          echo "Perl:"
+          (perl --version || perl -v) || echo "Perl not found" # perl -v gives more details
+          echo "PHP:"
+          php --version || echo "PHP not found"
+          echo "Lua:"
+          lua -v || echo "Lua not found"
+
+          echo ""
+          echo "--- Compiled Languages & SDKs ---"
+          echo "Java (JDK):"
+          java -version 2>&1 || echo "Java (JDK) not found" # java -version often prints to stderr
+          echo "Go (Golang):"
+          go version || echo "Go not found"
+          echo "Rust (rustc):"
+          rustc --version || echo "Rust (rustc) not found"
+          echo ".NET Core SDK:"
           dotnet --list-sdks || echo ".NET Core SDK not found"
-          # 他にも確認したいツールがあればここに追加します
+
+          echo ""
+          echo "--- C/C++ Compilers ---"
+          if [ "${{ runner.os }}" == "Linux" ] || [ "${{ runner.os }}" == "macOS" ]; then
+            echo "GCC:"
+            gcc --version || echo "GCC not found"
+            echo "G++:"
+            g++ --version || echo "G++ not found"
+            echo "Clang:"
+            clang --version || echo "Clang not found"
+          fi
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            echo "MSVC (Microsoft Visual C++ Compiler):"
+            # Attempt to call cl.exe. It should be in PATH on GitHub Windows runners.
+            # cl.exe outputs version info on the first few lines when called.
+            (cl.exe 2>&1 | findstr /B /C:"Microsoft (R) C/C++ Optimizing Compiler Version" /C:"Microsoft (R) C/C++ Optimizing Compiler バージョン" || echo "MSVC (cl.exe) not found, not in PATH, or version string pattern mismatch.")
+          fi
+
+          echo ""
+          echo "--- Mobile & Cross-Platform Frameworks ---"
+          echo "Flutter:"
+          # Flutter needs to be in PATH.
+          (command -v flutter && flutter --version) || echo "Flutter SDK not found or not in PATH"
+          
+          echo ""
+          echo "--- Game Engines (Version check can be complex) ---"
+          echo "Godot Engine:"
+          # Godot needs to be in PATH or called via its full path.
+          (command -v godot && godot --version) || echo "Godot Engine not found, not in PATH, or version check failed."
+          echo "Unity:"
+          echo "Unity version check is complex and usually requires editor context. Not performed by default."
+          echo "Unreal Engine (UE5):"
+          echo "Unreal Engine version check is complex. Not performed by default."
+          
+          echo ""
+          echo "--- OS Specific Development Tools ---"
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            echo "Xcode Command Line Tools:"
+            xcodebuild -version || echo "Xcode Command Line Tools not found"
+            # For full Xcode version if installed:
+            # if [ -d "/Applications/Xcode.app" ]; then defaults read /Applications/Xcode.app/Contents/Info.plist CFBundleShortVersionString; else echo "Full Xcode.app not found"; fi
+          fi
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            echo "Android NDK:"
+            # GitHub Windows runners usually set ANDROID_NDK_LATEST_HOME
+            command pwsh.exe -NoProfile -Command "
+              if (Test-Path Env:ANDROID_NDK_LATEST_HOME) {
+                \$ndkPath = \$env:ANDROID_NDK_LATEST_HOME
+                \$propsFile = Join-Path \$ndkPath 'source.properties'
+                if (Test-Path \$propsFile) {
+                  (Get-Content \$propsFile | Select-String 'Pkg.Revision' -ErrorAction SilentlyContinue).Line
+                } else {
+                  Write-Host \"source.properties not found in \$ndkPath (\$propsFile)\"
+                }
+              } else {
+                Write-Host 'ANDROID_NDK_LATEST_HOME environment variable not set. Trying common paths...'
+                # Fallback for older or custom setups if ANDROID_NDK_LATEST_HOME is not set
+                \$commonNdkPaths = @(
+                    (Get-ChildItem 'C:\\ProgramData\\Microsoft\\AndroidNDK64\\android-ndk-r*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1).FullName,
+                    'C:\\Users\\runneradmin\\AppData\\Local\\Android\\Sdk\\ndk'
+                )
+                \$foundRevision = \$null
+                foreach (\$path in \$commonNdkPaths) {
+                    if (\$path -and (Test-Path (Join-Path \$path 'source.properties'))) {
+                        \$propsFile = Join-Path \$path 'source.properties'
+                        \$foundRevision = (Get-Content \$propsFile | Select-String 'Pkg.Revision' -ErrorAction SilentlyContinue).Line
+                        if (\$foundRevision) { Write-Host \$foundRevision; break }
+                    }
+                }
+                if (!\$foundRevision) { Write-Host 'Android NDK Pkg.Revision not found in fallback common locations.' }
+              }
+            " || echo "Android NDK check (via PowerShell) failed."
+          fi
+
+          echo ""
+          echo "--- Containerization ---"
+          echo "Docker:"
+          docker --version || echo "Docker not found"
           
       # ランナーのシェルを使用して一連のコマンドを実行します
       - name: 複数行のスクリプトを実行
         shell: bash
         run: |
+          echo ""
+          echo "--- Workflow Completion ---"
           echo 他のアクションを追加して、
           echo プロジェクトをビルド、テスト、デプロイします。
