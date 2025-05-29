@@ -60,8 +60,8 @@ jobs:
             top -l 1 -s 0 | grep PhysMem
           else # Windows (pwsh)
             $mem = Get-CimInstance Win32_OperatingSystem
-            "Total: {0}GB" -f [math]::Round($mem.TotalVisibleMemorySize/1MB, 2)
-            "Free: {0}GB" -f [math]::Round($mem.FreePhysicalMemory/1MB, 2)
+            Write-Output ("Total: {0}GB" -f [math]::Round($mem.TotalVisibleMemorySize/1MB, 2))
+            Write-Output ("Free: {0}GB" -f [math]::Round($mem.FreePhysicalMemory/1MB, 2))
           fi
 
       - name: ストレージ空き容量を表示
