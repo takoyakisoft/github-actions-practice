@@ -162,6 +162,8 @@ jobs:
             echo "MSBuild:"
             (powershell -NoProfile -Command "(Get-Command MSBuild -ErrorAction SilentlyContinue).Path" ; MSBuild.exe -version -noLogo 2>&1 | findstr /B /C:"Microsoft (R) Build Engine version" /C:"Microsoft (R) Build Engine バージョン" || echo "MSBuild not found, not in PATH or version string pattern mismatch")
           fi
+          echo "vcpkg:"
+          (command -v vcpkg && vcpkg version) || echo "vcpkg not found or version command failed"
 
           echo ""
           echo "--- Java Build Tools ---"
